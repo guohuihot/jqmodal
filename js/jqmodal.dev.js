@@ -2,7 +2,7 @@
 * author : ahuing
 * date   : 2015-04-10
 * name   : jqModal v1.0
-* modify : 2015-7-6 17:03:56
+* modify : 2015-7-9 09:37:09
  */
 
 !function ($) {
@@ -29,6 +29,25 @@
         , st = $(window).scrollTop()
         , w = o.outerWidth()
         , h = o.outerHeight()
+        , pw = $p.width()
+        , ph = $p.height()
+        
+        return {
+            minL   : pw < w ? pw - w : 0
+            , minT : ph < h ? ph - h : 0
+            , maxL : pw < w ? 0 : $p.width() - w
+            , maxT : ph < h ? 0 : $p.height() - h
+            , st   : st
+            , h    : h
+        };
+    }/*
+    var showRange = function(o, p, f) {
+        var $p = $(!f ? 'body' : (p || window))
+        , st = $(window).scrollTop()
+        , w = o.outerWidth()
+        , h = o.outerHeight()
+        , pw = $p.width()
+        , ph = $p.height()
 
         return {
             minL   : 0
@@ -38,7 +57,7 @@
             , st   : st
             , h    : h
         };
-    }
+    }*/
 
     // drag
     var Drag = function (self, opt) {
@@ -50,7 +69,7 @@
     Drag.defaults = {
         handle       : ''
         , fixed      : 1
-        , opacity    : .8
+        , opacity    : 1
         , attachment : ''
     }
 
@@ -69,7 +88,7 @@
             $self.css({
                 opacity  : o.opacity
                 , zIndex : parseInt(new Date().getTime()/1000)
-            }).trigger('dragEnd')
+            }).trigger('dragEnd', [R])
 
             var R = showRange($self, o.attachment, o.fixed)
             , p = $self.position()
@@ -77,23 +96,25 @@
             , pt = p.top - e.pageY
             , dT = null;
             $(document).on('mousemove', function(de) {
+                // 阻止对象的默认行为,防止在img,a上拖拽时出错
+                de.preventDefault();
                 var nL = pl + de.pageX
                 , nT   = pt + de.pageY
                 , t    = nT < R.minT ? R.minT : (nT > R.maxT ? R.maxT : nT);
 
                 if (isIE6 && o.fixed) {
                     t = nT < R.st ? R.st : ( nT - R.st > s.maxT ? R.maxT + R.st : nT);
-                    $.modal.top = t - R.st;
+                    // $.modal.top = t - R.st;
                 };
 
                 $self.css({
                     left : nL < R.minL ? R.minL : (nL > R.maxL ? R.maxL : nL)
                     , top : t
-                }).trigger('drag')
+                }).trigger('drag', [R])
 
             }).on('mouseup',function() {
                 $(this).off('mousemove')
-                $self.css('opacity',1).trigger('dragEnd')
+                $self.css('opacity',1).trigger('dragEnd', [R])
             });
 
             return false;
@@ -284,10 +305,9 @@
         , setPos : function (){
             var o = this.o
             , R = showRange(this.$box, null, o.fixed);
-
             this.$box.css({
-                left: o.css.left || R.maxL / 2
-                , top: o.css.top || ($(window).height() - R.h) / 2 + ((isIE6 || !o.fixed) && R.st)
+                left: o.css.right >= 0 ? 'auto' : (o.css.left || R.maxL / 2)
+                , top: o.css.bottom >= 0 ? 'auto' : (o.css.top || ($(window).height() - R.h) / 2 + ((isIE6 || !o.fixed) && R.st))
             });
 
             // this.$self.is('iframe') && this.$bd.height(s.h - this.$hd.outerHeight());
@@ -313,14 +333,17 @@
 
     function Plugin(option, time) {
         return this.each(function () {
-          var $this   = $(this)
-          var data    = $this.data('jqModal')
-          var options = $.extend({}, Modal.defaults, $this.data(), typeof option == 'object' && option)
-          if (!data) { 
+            var $this   = $(this)
+            var data    = $this.data('jqModal')
+            var options = $.extend({}, Modal.defaults, $this.data(), typeof option == 'object' && option)
+            if (!data) { 
                 $this.data('jqModal', (data = new Modal(this, options)))
                 data.show()
             }
-          if (typeof option == 'string') data[option](time)
+            else {
+                if (typeof option == 'string') data[option](time)
+                else data['toggle']()
+            }
         })
     }
 
@@ -364,12 +387,12 @@
                 , animate: 'shake'
                 , css: {top: 100}
                 , lock: 1
-                , timeout: arguments[2] || 2000
+                , timeout: arguments[2] || 1500
             };
 
             if (!$target[0]) $target = $('<div class="jqtip"></div>')//.appendTo('body');
 
-            Plugin.call($target.html('<i class="ico ico-'+ arguments[1] +'"></i>'+ arguments[0]), option, arguments[2] || 2000);
+            Plugin.call($target.html('<i class="ico ico-'+ arguments[1] +'"></i>'+ arguments[0]), option, arguments[2] || 1500);
         }
         , alert : function (option) {
             var $target =  $('.jqalert')
