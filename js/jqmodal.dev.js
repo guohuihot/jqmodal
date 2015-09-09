@@ -2,7 +2,7 @@
 * author : ahuing
 * date   : 2015-04-10
 * name   : jqModal v1.0
-* modify : 2015-7-9 09:37:09
+* modify : 2015-7-9 16:37:20
  */
 
 !function ($) {
@@ -69,7 +69,7 @@
     Drag.defaults = {
         handle       : ''
         , fixed      : 1
-        , opacity    : 1
+        // , opacity    : 1
         , attachment : ''
     }
 
@@ -78,23 +78,31 @@
         var $self = this.$self.css('animation-fill-mode','backwards');
         var $handle = this.$handle;
 
-        $handle.css({
+        $handle
+        .css({
             cursor : 'move'
             // , userSelect : 'none'
-        }).on('selectstart', function() {
+        })
+        .on('selectstart', function() {
             return false;
         })
         .on('mousedown', function(e) {
-            $self.css({
+            $self
+            .css({
                 opacity  : o.opacity
                 , zIndex : parseInt(new Date().getTime()/1000)
-            }).trigger('dragEnd', [R])
-
+            })
+            .trigger('_mousemove', [e.pageX, e.pageY])
+            return false;
+        })
+        .on('_mousemove', function (e, x, y) {
             var R = showRange($self, o.attachment, o.fixed)
             , p = $self.position()
-            , pl = p.left - e.pageX
-            , pt = p.top - e.pageY
+            , pl = p.left - x
+            , pt = p.top - y
             , dT = null;
+
+            $self.trigger('dragStart', [R])
             $(document).on('mousemove', function(de) {
                 // 阻止对象的默认行为,防止在img,a上拖拽时出错
                 de.preventDefault();
@@ -114,10 +122,8 @@
 
             }).on('mouseup',function() {
                 $(this).off('mousemove')
-                $self.css('opacity',1).trigger('dragEnd', [R])
+                $self.trigger('dragEnd', [R])
             });
-
-            return false;
         })
     }
 
@@ -144,106 +150,79 @@
         this.Z       = parseInt(new Date().getTime()/1000);
         this.$self   = $(self)
         this.isShown = false
-        this.init()
     }
 
     Modal.prototype = {
         init : function () {            
-            var o = this.o;
-
-            var html= '<div class="jqModal animated">'
-                    + '    <div class="m-content m-' + o.mclass + '">'
-                    + '        <div class="m-head">' + o.head + '</div>'
-                    + '        <div class="m-body"></div>'
-                    + '        <div class="m-foot">' + o.foot + '</div>'
-                    + '        <a class="m-close" data-close="1" title="关闭" href="#"></a>'
-                    + '    </div>'
-                    + '</div>';
-
-            this.$box = $(html).appendTo('body')
-                        .css($.extend({}, o.css, {
-                            zIndex : this.Z
-                            , position : o.fixed && !isIE6 && 'fixed' || 'absolute'
-                        }));
-            // this.$content = this.$box.find('.m-content');
-            this.$hd  = this.$box.find('.m-head')
-                        .css($.extend({}, o.headcss, !o.head && {display : 'none'}));
-
-            this.$bd  = this.$box.find('.m-body').css(o.bodycss);
-
-            this.$ft  = this.$box.find('.m-foot')
-                        .css($.extend({}, o.footcss, !o.foot && {display : 'none'}));
-
-            this.$box.on('click', '[data-close]', $.proxy(this.hide, this));
+            var _this = this
+            , o       = _this.o
+            , _target = o.target
+            , html    = '<div class="jqModal animated">'
+                        + '    <div class="m-content m-' + o.mclass + '">'
+                        + '        <div class="m-head">' + o.head + '</div>'
+                        + '        <div class="m-body"></div>'
+                        + '        <div class="m-foot">' + o.foot + '</div>'
+                        + '        <a class="m-close" data-close="1" title="关闭" href="#"></a>'
+                        + '    </div>'
+                        + '</div>';
 
             //加载遮罩层
-            if(o.overlay) {
-                this.$overlay = $('<div class="m-overlay"></div>').insertBefore(this.$box)
-                .css({
-                    opacity : o.overlay
-                    , zIndex : this.Z
-                })
-                .on('click',!o.lock && $.proxy(this.hide, this) || $.noop);
+            if (o.overlay) {
+                _this.$overlay = $('<div class="m-overlay"></div>').appendTo('body')
+                                .css({
+                                    opacity : o.overlay
+                                    , zIndex : _this.Z
+                                })
+                                .on('click', !o.lock && $.proxy(_this.hide, _this) || $.noop);
             }
+            // 装载弹出层
+            _this.$box = $(html).appendTo('body')
+                        .css($.extend({}, o.css, {
+                            zIndex : _this.Z
+                            , position : o.fixed && !isIE6 && 'fixed' || 'absolute'
+                        }))
+                        // close
+                        .on('click', '[data-close]', $.proxy(_this.hide, _this));
 
+            _this.$hd  = _this.$box.find('.m-head')
+                        .css($.extend({}, o.headcss, !o.head && {display : 'none'}));
+
+            _this.$bd  = _this.$box.find('.m-body').css(o.bodycss);
+
+            _this.$ft  = _this.$box.find('.m-foot')
+                        .css($.extend({}, o.footcss, !o.foot && {display : 'none'}));
+
+            // draglay
+            if (o.drag) {
+                _this.$drag = $('<div class="drag-lay"></div>').appendTo(_this.$box);
+            }
             //ie6隐藏select
             isIE6 && $('select').css('visibility','hidden');
-            // loading
-            this.$loading = $('.modal-loading') || $('<div class="modal-loading"></div>').appendTo('body');
 
-            var str = o.target;
-
-            if (this.$self.is('iframe')) {
-                this.$self.attr({
+            if (_this.$self.is('iframe')) {
+                _this.$self.attr({
                     scrolling           : 'no'
                     , allowtransparency : true
                     , frameborder       : 0
                     , src               : o.remote
                 })
                 .appendTo(this.$bd)
-                .load($.proxy(function () {
-                    this.$self.add(this.$bd).height(this.$self.css('background','none').contents().find('body').height());
-                    this.setPos();
-                }, this))
-            }
-            else if (this.$self.is('img')) {
-                this.loading('show')
-
-                var $img = $('<img>')
-                , _img = new Image();
-
-                _img.onerror = function () {
-                    this.loading('error')
-                }
-
-                _img.onload = function () {
-                    var imgSize = this.getImgSize(_img, parseInt($w.width()*.8), parseInt($w.height()*.8));
-
-                    this.$bd.html($img.css({
-                        width : imgSize[0]
-                        , height : imgSize[1]
-                    }));
-                    this.setPos();
-                }
-                _img.src = str;
-                $img.attr('src', str);
-
+                .load(function () {
+                    _this.setPos(1);
+                })
             }
             else {
-                this.$bd.append(this.$self.css('display', 'block'));
+                _this.$bd.append(_this.$self.css('display', 'block'));
             }
 
             this.setPos();
-            // this.show();
-            $(document).on('keydown.modal', $.proxy(function(e){
-                e.which == 27 && this.hide();
+            $(document).on('keydown.modal', function(e){
+                e.which == 27 && _this.hide();
                 return true;
-            }, this));
+            });
 
-            o.fixed && $(window).on('resize', $.proxy(this.setPos, this));
+            o.fixed && $(window).on('resize', $.proxy(_this.setPos, _this));
 
-            o.callBack && o.callBack.call(this);
-            
         }
         , show : function () {
             if (this.isShown) return
@@ -262,10 +241,39 @@
                 });
             };
 
-            this.o.drag && PluginDrag.call(this.$box, {
-                handle  : this.$hd
-                , fixed : this.o.fixed
-            })
+            if (this.o.drag) {
+                this.$hd.add(this.$drag).on('mousedown', $.proxy(function (e) {
+                    this.$drag.trigger('_mousemove', [e.pageX, e.pageY]);
+                    if (this.o.drag > 1) this.$drag.addClass('drag-lay-drag');
+                }, this))
+
+                $('body').on('mouseup', $.proxy(function () {
+                    this.$drag.removeClass('drag-lay-drag');
+                }, this));
+
+                if (this.o.drag > 1) {
+                    PluginDrag.call(this.$drag, {
+                        fixed : this.o.fixed
+                    })
+                    var _this = this;
+                    this.$drag.on('dragEnd', function () {
+                        _this.$box.css({
+                            left: function (i, v) {
+                                return v + _this.$drag.position().left;
+                            }
+                            , top:  function (i, v) {
+                                return v + _this.$drag.position().top;
+                            }
+                        });
+                    })
+                }
+                else {
+                    PluginDrag.call(this.$box, {
+                        handle  : this.$drag
+                        , fixed : this.o.fixed
+                    })
+                };
+            } 
 
             if(this.o.timeout) {
                 clearTimeout(this.t);
@@ -290,7 +298,6 @@
 
             if(isIE6){
                 $('select').css('visibility','visible');
-                // $w.off('scroll');
             }
             this.isShown = false;
             return false;
@@ -298,19 +305,20 @@
         , toggle : function (time) {
             return this.isShown ? this.hide(time) : this.show()
         }
-        , loading : function(state) {
-            this.$loading[state]();
+        , setSize : function () {
+            if (this.$self.is('iframe')) {
+                this.$self.add(this.$bd).height(this.$self.css('background','none').contents().find('body').height());
+            } 
         }
         // 设置位置
-        , setPos : function (){
+        , setPos : function (isComplete){
+            isComplete && this.setSize();
             var o = this.o
             , R = showRange(this.$box, null, o.fixed);
             this.$box.css({
                 left: o.css.right >= 0 ? 'auto' : (o.css.left || R.maxL / 2)
                 , top: o.css.bottom >= 0 ? 'auto' : (o.css.top || ($(window).height() - R.h) / 2 + ((isIE6 || !o.fixed) && R.st))
             });
-
-            // this.$self.is('iframe') && this.$bd.height(s.h - this.$hd.outerHeight());
         }
     }
 
@@ -321,7 +329,7 @@
         , remote       : ''
         , fixed        : 1 //fixed效果
         , overlay      : .3 //显示遮罩层, 0为不显示
-        , drag         : 1 //拖拽 1
+        , drag         : 2 //拖拽 1
         , lock         : 0 //锁定遮罩层
         , timeout      : 0
         , css          : {}
@@ -338,6 +346,7 @@
             var options = $.extend({}, Modal.defaults, $this.data(), typeof option == 'object' && option)
             if (!data) { 
                 $this.data('jqModal', (data = new Modal(this, options)))
+                data.init()
                 data.show()
             }
             else {
@@ -386,6 +395,7 @@
                 mclass: 'tip'
                 , animate: 'shake'
                 , css: {top: 100}
+                , drag: 0
                 , lock: 1
                 , timeout: arguments[2] || 1500
             };
