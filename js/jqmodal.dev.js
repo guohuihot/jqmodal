@@ -1,8 +1,8 @@
 /**
 * author : ahuing
 * date   : 2015-04-10
-* name   : jqModal v1.0
-* modify : 2015-7-9 16:37:20
+* name   : jqModal v1.1
+* modify : 2015-9-10 08:41:09
  */
 
 !function ($) {
@@ -23,24 +23,13 @@
     // 公用
     var isIE6 = !-[1,] && !window.XMLHttpRequest;
 
-    // 获取显示拖拽范围
-    var showRange = function(o, p, f) {
-        var $p = $(!f ? 'body' : (p || window))
-        , st = $(window).scrollTop()
-        , w = o.outerWidth()
-        , h = o.outerHeight()
-        , pw = $p.width()
-        , ph = $p.height()
-        
-        return {
-            minL   : pw < w ? pw - w : 0
-            , minT : ph < h ? ph - h : 0
-            , maxL : pw < w ? 0 : $p.width() - w
-            , maxT : ph < h ? 0 : $p.height() - h
-            , st   : st
-            , h    : h
-        };
-    }/*
+    /**
+     * 得到拖拽范围
+     * @param  {sting} o 对象本身
+     * @param  {string} p 对象的父层，拖拽不能超出父层
+     * @param  {number} f 是否fixed
+     * @return {json}   minL:最小left,minT最小top,h:对象的高度
+     */
     var showRange = function(o, p, f) {
         var $p = $(!f ? 'body' : (p || window))
         , st = $(window).scrollTop()
@@ -50,14 +39,14 @@
         , ph = $p.height()
 
         return {
-            minL   : 0
-            , minT : 0
-            , maxL : $p.width() - w
-            , maxT : $p.height() - h
+            minL   : pw < w ? pw - w : 0
+            , minT : ph < h ? ph - h : 0
+            , maxL : pw < w ? 0 : $p.width() - w
+            , maxT : ph < h ? 0 : $p.height() - h
             , st   : st
             , h    : h
         };
-    }*/
+    }
 
     // drag
     var Drag = function (self, opt) {
@@ -100,7 +89,8 @@
             , p = $self.position()
             , pl = p.left - x
             , pt = p.top - y
-            , dT = null;
+            , dT = null
+            , l, t;
 
             $self.trigger('dragStart', [R])
             $(document).on('mousemove', function(de) {
@@ -108,21 +98,18 @@
                 de.preventDefault();
                 var nL = pl + de.pageX
                 , nT   = pt + de.pageY
-                , t    = nT < R.minT ? R.minT : (nT > R.maxT ? R.maxT : nT);
 
-                if (isIE6 && o.fixed) {
-                    t = nT < R.st ? R.st : ( nT - R.st > s.maxT ? R.maxT + R.st : nT);
-                    // $.modal.top = t - R.st;
-                };
+                l = nL < R.minL ? R.minL : (nL > R.maxL ? R.maxL : nL)
+                t = nT < R.minT ? R.minT : (nT > R.maxT ? R.maxT : nT);
 
                 $self.css({
-                    left : nL < R.minL ? R.minL : (nL > R.maxL ? R.maxL : nL)
-                    , top : t
-                }).trigger('drag', [R])
+                    left : l
+                    , top : t + (isIE6 && o.fixed && R.st || 0)
+                }).trigger('drag', [l, t])
 
             }).on('mouseup',function() {
                 $(this).off('mousemove')
-                $self.trigger('dragEnd', [R])
+                $self.trigger('dragEnd', [l, t])
             });
         })
     }
@@ -150,6 +137,23 @@
         this.Z       = parseInt(new Date().getTime()/1000);
         this.$self   = $(self)
         this.isShown = false
+    }
+
+    Modal.defaults = {
+        mclass          : 'modal' //[ modal | tip | lay ]
+        , head         : ''//标题
+        , foot         : '' // 内容
+        , remote       : ''
+        , fixed        : 1 //fixed效果
+        , overlay      : .3 //显示遮罩层, 0为不显示
+        , drag         : 1 //拖拽 1
+        , lock         : 0 //锁定遮罩层
+        , timeout      : 0
+        , css          : {}
+        , headcss      : {}
+        , bodycss      : {}
+        , footcss      : {}
+        , animate     : 'bounceInDown' // shake | flipInY | bounceInDown | zoomIn
     }
 
     Modal.prototype = {
@@ -192,10 +196,6 @@
             _this.$ft  = _this.$box.find('.m-foot')
                         .css($.extend({}, o.footcss, !o.foot && {display : 'none'}));
 
-            // draglay
-            if (o.drag) {
-                _this.$drag = $('<div class="drag-lay"></div>').appendTo(_this.$box);
-            }
             //ie6隐藏select
             isIE6 && $('select').css('visibility','hidden');
 
@@ -215,7 +215,32 @@
                 _this.$bd.append(_this.$self.css('display', 'block'));
             }
 
+            if (o.drag) {
+                _this.$drag = $('<div class="jqModal-drag"></div>').insertAfter(_this.$box);
+                _this.$hd.on('mousedown', function (e) {
+                    _this.$drag.css('display', 'block').trigger('_mousemove', [e.pageX, e.pageY]);
+                    o.drag > 1 && _this.$drag.addClass('jqModal-drag-style');
+                })
+
+                $(document).on('mouseup', function () {
+                    _this.$drag.css('display', 'none');
+                    o.drag > 1 && _this.$drag.removeClass('jqModal-drag-style');
+                });
+
+                _this.$drag.on(o.drag > 1 ? 'dragEnd' : 'drag', function (el, l, t) {
+                    _this.$box.css({
+                        left: l
+                        , top: t
+                    });
+                })
+
+                isIE6 && _this.$drag.on('dragEnd', function (el, l, t) {
+                    _this.fixedT = t;
+                })
+            } 
+
             this.setPos();
+
             $(document).on('keydown.modal', function(e){
                 e.which == 27 && _this.hide();
                 return true;
@@ -225,55 +250,15 @@
 
         }
         , show : function () {
-            if (this.isShown) return
-            this.$self.trigger('showFun');
-            this.$overlay && this.$overlay.css('display', 'block')
-            this.$box.css('display','block')
-            $.support.transition && this.$box.addClass(this.o.animate)
-            this.$self.trigger('shownFun');
-            this.isShown = true
+            var _this = this;
 
-            if (isIE6 && o.fixed && !o.drag) {
-                var _top = s.maxT / 2;
-                var $w = $(window);
-                $w.on('scroll',function(){
-                    this.$box.css({'top' : _top + $w.scrollTop()})
-                });
-            };
-
-            if (this.o.drag) {
-                this.$hd.add(this.$drag).on('mousedown', $.proxy(function (e) {
-                    this.$drag.trigger('_mousemove', [e.pageX, e.pageY]);
-                    if (this.o.drag > 1) this.$drag.addClass('drag-lay-drag');
-                }, this))
-
-                $('body').on('mouseup', $.proxy(function () {
-                    this.$drag.removeClass('drag-lay-drag');
-                }, this));
-
-                if (this.o.drag > 1) {
-                    PluginDrag.call(this.$drag, {
-                        fixed : this.o.fixed
-                    })
-                    var _this = this;
-                    this.$drag.on('dragEnd', function () {
-                        _this.$box.css({
-                            left: function (i, v) {
-                                return v + _this.$drag.position().left;
-                            }
-                            , top:  function (i, v) {
-                                return v + _this.$drag.position().top;
-                            }
-                        });
-                    })
-                }
-                else {
-                    PluginDrag.call(this.$box, {
-                        handle  : this.$drag
-                        , fixed : this.o.fixed
-                    })
-                };
-            } 
+            if (_this.isShown) return
+            _this.$self.trigger('showFun');
+            _this.$overlay && _this.$overlay.css('display', 'block')
+            _this.$box.css('display','block')
+            $.support.transition && _this.$box.addClass(_this.o.animate)
+            _this.$self.trigger('shownFun');
+            _this.isShown = true
 
             if(this.o.timeout) {
                 clearTimeout(this.t);
@@ -298,6 +283,7 @@
 
             if(isIE6){
                 $('select').css('visibility','visible');
+                $(window).off('scroll.modal');
             }
             this.isShown = false;
             return false;
@@ -313,30 +299,34 @@
         // 设置位置
         , setPos : function (isComplete){
             isComplete && this.setSize();
-            var o = this.o
-            , R = showRange(this.$box, null, o.fixed);
-            this.$box.css({
-                left: o.css.right >= 0 ? 'auto' : (o.css.left || R.maxL / 2)
-                , top: o.css.bottom >= 0 ? 'auto' : (o.css.top || ($(window).height() - R.h) / 2 + ((isIE6 || !o.fixed) && R.st))
-            });
-        }
-    }
+            var _this = this
+            o = _this.o
+            , R = showRange(_this.$box, null, o.fixed)
+            , _this.fixedT = o.css.bottom >= 0 ? R.maxT - o.css.bottom : (o.css.top || ($(window).height() - R.h) / 2);
 
-    Modal.defaults = {
-        mclass          : 'modal' //[ modal | tip | lay ]
-        , head         : ''//标题
-        , foot         : '' // 内容
-        , remote       : ''
-        , fixed        : 1 //fixed效果
-        , overlay      : .3 //显示遮罩层, 0为不显示
-        , drag         : 2 //拖拽 1
-        , lock         : 0 //锁定遮罩层
-        , timeout      : 0
-        , css          : {}
-        , headcss      : {}
-        , bodycss      : {}
-        , footcss      : {}
-        , animate     : 'bounceInDown' // shake | flipInY | bounceInDown | zoomIn
+            _this.$box.css({
+                left: o.css.right >= 0 ? 'auto' : (o.css.left || R.maxL / 2)
+                , top: _this.fixedT + ((isIE6 || !o.fixed) && R.st)
+            });
+
+            if (isIE6 && o.fixed) {
+                var $w = $(window);
+                $w.on('scroll.modal',function(){
+                    _this.$box.css({'top' : _this.fixedT + $w.scrollTop()})
+                });
+            };
+
+            if (o.drag) {
+                _this.$drag[0].style.cssText = _this.$box[0].style.cssText;
+                _this.$drag.css({
+                    width: _this.$box.width() - 6
+                    , height: _this.$box.height() - 6
+                })
+                PluginDrag.call(_this.$drag, {
+                    fixed : _this.o.fixed
+                })
+            }
+        }
     }
 
     function Plugin(option, time) {
